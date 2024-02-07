@@ -1,7 +1,7 @@
 from tqdm import tqdm
+import concurrent.futures
 import subprocess
 import re
-import threading
 import openpyxl
 import platform   
 
@@ -25,37 +25,43 @@ def ping_host(hostname):
         delay_match = re.search(r"(\d+\.?\d*)ms", output.decode("utf-8", errors='ignore'))
         if delay_match:
             delay_ms = float(delay_match.group(1))
-            if config_list[2] == 'yes' :
+            if config_list[2] == 'yes':
                 print(f"{hostname} is up! Delay: {delay_ms} ms")
         else:
             print(f"Unable to extract delay information for {hostname}")
     else:
-        if config_list[3] == 'yes' :
+        if config_list[3] == 'yes':
             print(f"{hostname} is down!")
 
-    if config_list[6] == 'yes' :
+    if config_list[6] == 'yes':
         progress_bar.update(1)
 
 if __name__ == "__main__":
-    config_list = read_excel_column('config.xlsx', 'config', 'B')  ## 這行不能改，用excel 做config 檔
+    config_list = read_excel_column('config.xlsx', 'config', 'B')
+
+    hostname_list = read_excel_column('config.xlsx', config_list[0], config_list[1])
+
+    total_delay = 0
+    threads = []
 
     for runs in range(int(config_list[7])) :
-        hostname_list = read_excel_column('config.xlsx', config_list[0],config_list[1])
 
-        total_delay = 0
-        threads = []
-        if config_list[6] == 'yes' :
-            progress_bar = tqdm(total=len(hostname_list), desc="Pinging hosts", unit="host")
-        
-        print("---------------Processing(Please Wait)---------------")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=int(config_list[8])) as executor:  # Adjust max_workers as needed
+            if config_list[6] == 'yes':
+                progress_bar = tqdm(total=len(hostname_list), desc="Pinging hosts", unit="host")
 
-        for hostname in hostname_list:
-            thread = threading.Thread(target=ping_host, args=(hostname,)) 
-            threads.append(thread)
-            thread.start()
+            print("---------------Processing(Please Wait)---------------")
 
-        for thread in threads:
-            thread.join()
+            futures = [executor.submit(ping_host, hostname) for hostname in hostname_list]
+
+            for future in concurrent.futures.as_completed(futures):
+                pass  # Nothing needs to be done here
+
+            if config_list[6] == 'yes':
+                progress_bar.close()
 
         printrun = int(runs) + 1 
-        print(f"        ---------------End {printrun}---------------        ")
+        total = int(config_list[7])
+        print(f"        ---------------End {printrun}/{total} ---------------        ")
+
+    input("Press Enter to continue...")
